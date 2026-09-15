@@ -21,12 +21,12 @@ would merge it. Which engine answered is shown with the result.
 
 It opens http://127.0.0.1:8787 for you.
 
-No repository handy:
 
-```
-./demo/make_demo_repo.sh /tmp/steinsgit-demo
-./steinsgit.py /tmp/steinsgit-demo --days 200
-```
+
+https://github.com/user-attachments/assets/1502967a-6b36-4cda-afe1-d79a26803e00
+
+
+
 
 ## The number
 
