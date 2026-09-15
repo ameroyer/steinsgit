@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STEINS;GIT developer guide</title>
+<style>
+  :root{
+    --bg:#0a0a09; --panel:#0e0e0c; --ink:#f7f4ec; --dim:#d2ccbe; --faint:#a39c8e;
+    --line:rgba(226,219,204,.13); --amber:#ff9a2e; --green:#6fbf73; --red:#ff4224;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono);
+    font-size:13.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding:38px 24px 80px}
+  h1{font-size:21px; letter-spacing:.22em; color:var(--amber); font-weight:400; margin:0 0 4px}
+  .sub{color:var(--faint); font-size:11.5px; letter-spacing:.14em; margin-bottom:30px}
+  h2{
+    font-size:11px; letter-spacing:.26em; color:var(--amber); font-weight:400;
+    border-bottom:1px solid var(--line); padding-bottom:6px; margin:36px 0 14px;
+  }
+  h3{font-size:13px; color:var(--ink); font-weight:600; margin:22px 0 6px}
+  p{margin:0 0 12px; color:var(--dim)}
+  b{color:var(--ink)}
+  code{color:var(--amber); background:rgba(255,154,46,.08); padding:1px 4px; border-radius:2px}
+  pre{
+    background:#070706; border:1px solid var(--line); border-left:2px solid var(--amber);
+    padding:12px 14px; overflow-x:auto; font-size:12px; line-height:1.55;
+    color:var(--dim); margin:0 0 14px; border-radius:0 2px 2px 0;
+  }
+  pre b{color:var(--amber); font-weight:400}
+  table{width:100%; border-collapse:collapse; margin:0 0 16px; font-size:12.5px}
+  th{
+    text-align:left; color:var(--faint); font-weight:400; font-size:9.5px;
+    letter-spacing:.2em; border-bottom:1px solid var(--line); padding:6px 8px;
+  }
+  td{padding:6px 8px; border-bottom:1px solid rgba(226,219,204,.06); vertical-align:top}
+  td:first-child{color:var(--ink); white-space:nowrap}
+  td.d{color:var(--dim)}
+  .note{
+    border-left:2px solid var(--green); background:rgba(111,191,115,.06);
+    padding:9px 13px; margin:0 0 16px; color:var(--ink);
+  }
+  .warn{border-left-color:var(--red); background:rgba(255,66,36,.06)}
+  ul{margin:0 0 14px; padding-left:20px; color:var(--dim)}
+  li{margin-bottom:4px}
+  a{color:var(--amber)}
+  .toc{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:6px 18px; margin-bottom:8px; font-size:12px;
+  }
+  .toc a{text-decoration:none; color:var(--dim)}
+  .toc a:hover{color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>STEINS;GIT</h1>
+<div class="sub">developer guide</div>
+
+<div class="toc">
+  <a href="#run">1. Run it</a>
+  <a href="#shape">2. Shape of the thing</a>
+  <a href="#flow">3. What happens on load</a>
+  <a href="#modules">4. Module reference</a>
+  <a href="#layout">5. How the graph is laid out</a>
+  <a href="#cache">6. Caching</a>
+  <a href="#claude">7. Calling Claude</a>
+  <a href="#safety">8. Safety rules</a>
+  <a href="#test">9. Testing without a browser</a>
+  <a href="#extend">10. Adding things</a>
+  <a href="#traps">11. Traps</a>
+</div>
+
+<h2 id="run">1. RUN IT</h2>
+<pre>./steinsgit.py /path/to/repo --days 90 --port 8787
+./steinsgit.py /path/to/repo -v          <b># log every request</b>
+./steinsgit.py /path/to/repo --no-cache  <b># ignore saved data</b></pre>
+<p>There is nothing to install and nothing to build. Python 3.9 and git are
+enough. The <code>claude</code> CLI is only needed for the analysis buttons.</p>
+
+<h2 id="shape">2. SHAPE OF THE THING</h2>
+<p>A Python process reads git, holds the result in memory, and serves a single
+page. The page draws everything on one canvas and talks back over a small JSON
+API. No framework on either side.</p>
+<pre>  git  ->  gitdata.py  ->  layout.py  ->  session.py  ->  routes.py
+                              |              |              |
+                        divergence.py     store.py        server.py
+                                                             |
+                                                          browser
+                                       meter / render / core / claude /
+                                       panels / dialogs / app</pre>
+<p>Three rules hold the design together:</p>
+<ul>
+  <li><b>gitdata.py never writes.</b> The only code that changes a repository is
+      <code>worktree.py</code>, and only when a button is pressed.</li>
+  <li><b>Cache keys are commit SHAs.</b> Results are pure functions of immutable
+      objects, so a key cannot go stale.</li>
+  <li><b>The model is read-only.</b> Enforced by process flags, not prompt text.</li>
+</ul>
+
+<h2 id="flow">3. WHAT HAPPENS ON LOAD</h2>
+<pre>GET /            index.html, then 7 scripts in order
+GET /api/state   the whole graph in one response</pre>
+<p><code>Session.snapshot()</code> does the work:</p>
+<ul>
+  <li>list refs, pick the default branch, drop remotes that duplicate a local branch</li>
+  <li>build a fingerprint from every ref tip plus the window settings</li>
+  <li>if the fingerprint matches a saved snapshot, return it and stop</li>
+  <li>otherwise read the log, read per-commit stats in one pass, lay it out,
+      then measure every branch in parallel</li>
+</ul>
+<p>Divergence needs four git calls per branch, so they run on a thread pool.
+Those threads wait on child processes, so the pool is sized past the core
+count.</p>
+
+<h2 id="modules">4. MODULE REFERENCE</h2>
+<table>
+<tr><th>FILE</th><th>DOES</th></tr>
+<tr><td>gitdata.py</td><td class="d">Runs git and parses it. One <code>Repo</code> class. Never writes.</td></tr>
+<tr><td>layout.py</td><td class="d">Turns commits into columns and vertical positions.</td></tr>
+<tr><td>divergence.py</td><td class="d">The six measurements, the bands, and per-commit change size.</td></tr>
+<tr><td>session.py</td><td class="d">One repository held in memory. Owns settings and the cache.</td></tr>
+<tr><td>store.py</td><td class="d">SQLite key-value store with size caps and migrations.</td></tr>
+<tr><td>server.py</td><td class="d">Sockets, headers, events, static files, origin checks.</td></tr>
+<tr><td>routes.py</td><td class="d">Every API handler. Mixed into the request handler.</td></tr>
+<tr><td>oracle.py</td><td class="d">Starts <code>claude</code> as a subprocess and translates its output.</td></tr>
+<tr><td>worktree.py</td><td class="d">The only code that writes. Makes branches and worktrees.</td></tr>
+<tr><td>forge.py</td><td class="d">Turns a remote URL into GitHub, GitLab or Bitbucket links.</td></tr>
+<tr><td>export.py</td><td class="d">Builds one HTML file with everything inlined.</td></tr>
+<tr><td>core.js</td><td class="d">The <code>SG</code> namespace: state, elements, helpers.</td></tr>
+<tr><td>claude.js</td><td class="d">Streaming calls, token counting, the output pane.</td></tr>
+<tr><td>panels.js</td><td class="d">The right-hand inspector.</td></tr>
+<tr><td>dialogs.js</td><td class="d">Modals: help, settings, rescan, merge, export, first run.</td></tr>
+<tr><td>app.js</td><td class="d">Boot, load, selection, canvas callbacks.</td></tr>
+<tr><td>render.js</td><td class="d">The canvas. Self-contained, no dependency on SG.</td></tr>
+<tr><td>meter.js</td><td class="d">The nixie tubes.</td></tr>
+</table>
+<p>The browser files share one object. <code>core.js</code> creates it, each file
+adds to it, and cross-file calls go through <code>SG.</code>. Load order is fixed
+in <code>index.html</code>.</p>
+
+<h2 id="layout">5. HOW THE GRAPH IS LAID OUT</h2>
+<p><code>layout.py</code> runs three passes.</p>
+
+<h3>Pass 1: who owns each commit</h3>
+<p>Walk each branch down its first parents and claim commits nobody has claimed.
+The default branch goes first, so a feature branch can never take over the
+trunk. Anything left, reachable only through a merge's second parent, is claimed
+in a second sweep.</p>
+
+<h3>Pass 2: vertical position</h3>
+<p>Sort by time, then space commits out by the gap between them, compressed with
+a log so a busy afternoon stays readable and a quiet month does not become a
+desert. Then run a topological pass so a child is never below its own parent, which
+a rebase or a wrong clock would otherwise cause.</p>
+<p>World Y is negative going up. The oldest commit sits at <code>y = 0</code> and
+the renderer maps world Y straight to screen Y with no flipping.</p>
+
+<h3>Pass 3: columns</h3>
+<p>Branches are packed into columns in <b>divergence order</b>: the canvas
+places a column by how far its branches have diverged, so the occupants of one
+column have to be alike, or one outlier drags every quiet branch sharing it out
+to the edge. Within a band, a branch prefers the free column nearest the branch
+it forked from, and two branches share a column only if their time ranges do
+not touch. Padding above a tip is much larger than below it, because the name
+plate hangs there.</p>
+
+<div class="note">The renderer receives a <b>column index</b>, not an x value.
+Y is a world-space scale but X is screen space: each column owns a slab of
+width, and the slab widths are animated weights - the regex filter and the
+pair focus hand width from faded branches to the ones in front. Positions are
+running totals outward from the trunk, which is what makes overlapping columns
+impossible.</div>
+
+<h2 id="cache">6. CACHING</h2>
+<p>One SQLite file at <code>.steinsgit/knowledge.db</code>, one table, keyed by
+kind and key.</p>
+<table>
+<tr><th>KIND</th><th>KEY</th><th>HOLDS</th></tr>
+<tr><td>snapshot</td><td class="d">version + all ref tips + window</td><td class="d">the whole graph</td></tr>
+<tr><td>divergence</td><td class="d">version + base SHA + head SHA</td><td class="d">one reading</td></tr>
+<tr><td>mergetree</td><td class="d">version + both tip SHAs + engine</td><td class="d">a merge test</td></tr>
+<tr><td>commit</td><td class="d">version + commit SHA</td><td class="d">commit detail</td></tr>
+<tr><td>explain</td><td class="d">commit: its SHA. branch: version + name + tip SHA</td><td class="d">a one-line summary</td></tr>
+<tr><td>oracle</td><td class="d">version + model + main SHA + tip SHA (or both tips for a merge)</td><td class="d">a full analysis</td></tr>
+<tr><td>worldline</td><td class="d">branch name</td><td class="d">what a merge test was made from</td></tr>
+<tr><td>meta</td><td class="d">fixed</td><td class="d">settings, running spend total</td></tr>
+</table>
+<p>Because keys are SHAs there is no expiry and no invalidation code. If a branch
+moves, the key changes. Commit and branch summaries have <b>separate keys on
+purpose</b>: nearly every branch tip is also a commit, and filing both under the
+SHA made the two overwrite each other.</p>
+<div class="warn"><b>When you change a stored shape, bump its key.</b> Removing a
+field is not enough. Old rows written by an earlier build will still be served
+and will put the field back. That is a bug this project has already had once.</div>
+
+<h2 id="claude">7. CALLING CLAUDE</h2>
+<p><code>oracle.py</code> runs the CLI as a subprocess and converts its
+stream-json output into small events the browser understands.</p>
+<pre>run()            <b>free text, streamed: branch and merge analysis</b>
+explain_stream() <b>structured output against a JSON schema, streamed</b></pre>
+<p>Events reach the browser as server-sent events:</p>
+<pre>status  connected, model name
+tool    a tool call, with a short argument
+usage   running token count while work is happening
+text    a fragment of the answer
+merge   the deterministic merge result, sent before the model replies
+result  final usage, cost, duration
+done    stream closed</pre>
+<p>Two details worth keeping:</p>
+<ul>
+  <li><b>Facts before opinion.</b> <code>git merge-tree --write-tree</code> runs
+      first and its result is sent immediately, so the panel is useful even if
+      the model call fails.</li>
+  <li><b>Explanations are batched.</b> Forty commits, or thirty branch
+      descriptions, go in one request. The reply is checked against a schema by
+      the CLI, so it conforms or the model retries.</li>
+</ul>
+
+<h3>The full run</h3>
+<p>A run has three steps - explain commits, describe branches, review branches -
+picked separately because a review is one call per branch on the expensive
+model and is nearly all of the cost. Two endpoints keep the page honest:
+<code>/api/plan</code> says what is already written, what is left and what it
+should cost, priced from this repository's own past calls; and
+<code>/api/targets</code> returns the exact lists a run would touch, so what
+was priced and what runs cannot be two different lists. The run caps
+(<code>explainLimit</code>, <code>branchLimit</code>) trim those lists - newest
+commits, most recently touched branches - without narrowing what is loaded.
+The in-flight cost estimate needs no price table: the rate comes from the calls
+the run itself has already been billed for. STOP lets go of the call in flight
+rather than killing it; the server reads it to the end and saves it, so
+stopping costs that one call and nothing after it.</p>
+
+<h2 id="safety">8. SAFETY RULES</h2>
+<h3>The model cannot write</h3>
+<pre>--permission-prompts none   <b>anything needing permission is denied</b>
+--allowedTools  ...         <b>Read, Grep, Glob, read-only git</b>
+--disallowedTools ...       <b>Write, Edit, git commit/merge/push...</b></pre>
+<p>Tested by asking it to edit a file. It tries <code>Edit</code>, then
+<code>Write</code>, then tries to escape through <code>Bash(cat &gt; ...)</code>.
+All three are refused.</p>
+
+<h3>The server only answers its own page</h3>
+<p>Several endpoints create branches or spend money, and there is no login. Every
+request - the API, the page, and the exports, which carry everything the
+analysis wrote - is checked against <code>Host</code>, <code>Origin</code> and
+<code>Sec-Fetch-Site</code>. That stops a page on another site calling these
+URLs in the background, and stops DNS rebinding.</p>
+
+<h3>Nothing private goes out</h3>
+<p>Author email is never read from git. The co-author trailer is read only to
+answer yes or no to "was a model involved"; the name that matched is kept, the
+address is stripped on the spot. Credentials inside a remote URL are stripped
+before that URL is shown. Exports leave out the absolute path.</p>
+
+<h2 id="test">9. TESTING WITHOUT A BROWSER</h2>
+<p>The browser files are classic scripts with no imports, so any JavaScript
+engine can run them: <code>node --check</code> for syntax, then a harness that
+stubs <code>document</code>, a counting canvas context and
+<code>EventSource</code>, evaluates the seven files in page order, and feeds in
+a real <code>/api/state</code> payload dumped from a live
+<code>Session</code>. Write the harness for the thing you just changed; it is
+twenty lines of stubs, not a framework.</p>
+<p>A good harness checks the things that are easy to get wrong:</p>
+<ul>
+  <li>every commit is clickable at its own position</li>
+  <li>no two name plates overlap, and each is clickable</li>
+  <li>a merge test draws one tie per parent branch</li>
+  <li>the spawn animation reveals commits over time</li>
+</ul>
+<div class="note">This catches crashes, wrong maths and broken wiring. It says
+nothing about whether the result looks good. Check colour, spacing and glow by
+eye.</div>
+
+<h2 id="extend">10. ADDING THINGS</h2>
+
+<h3>A new endpoint</h3>
+<p>Add a branch in <code>Routes._api_get</code> or <code>do_POST</code>, then the
+handler beside its neighbours. <code>self.sess</code> is the session and
+<code>self._json</code> replies. Nothing else to register.</p>
+
+<h3>A new measurement</h3>
+<p>Add it to <code>WEIGHTS</code> and <code>SCALE</code> in
+<code>divergence.py</code>, compute it in <code>compute()</code>, and make the
+weights sum to 1. Then bump the divergence cache key.</p>
+
+<h3>A new panel</h3>
+<p>Write a render function in <code>panels.js</code>, export it on
+<code>SG</code>, and call it from <code>showBranch</code> or
+<code>showCommit</code>. Escape everything with <code>SG.esc</code>.</p>
+
+<h3>Something drawn on the canvas</h3>
+<p><code>render.js</code> knows nothing about the rest of the front end. Add a
+draw function, call it from <code>draw()</code> in paint order, and use
+<code>sx(lane)</code> and <code>sy(worldY)</code> for coordinates. If it moves,
+set <code>animating</code> so the loop keeps painting.</p>
+
+<h2 id="traps">11. TRAPS</h2>
+<ul>
+  <li><b>Do not call <code>snapshot()</code> during a scan.</b> The lock is not
+      reentrant and it will deadlock. Pass the graph in instead.</li>
+  <li><b>Draw and hit-test must agree.</b> Node size is one shared function. Two
+      copies means a dot you can see and cannot click.</li>
+  <li><b>Nothing per-frame that can be done once.</b> Sorting edges in the draw
+      loop cost real time on a large repository.</li>
+  <li><b>Per-commit data is multiplied by thousands.</b> A short sentence
+      attached to every commit added hundreds of kilobytes to each response.</li>
+  <li><b>A conflicted merge has no merge commit.</b> Provenance for a merge test
+      is recorded when it is made, and recovered from <code>MERGE_HEAD</code> and
+      <code>MERGE_MSG</code> for older ones.</li>
+  <li><b>Paint SVG with attributes, not CSS alone.</b> If the rule does not
+      apply, shapes fall back to solid black.</li>
+</ul>
+
+</div>
+</body>
+</html>

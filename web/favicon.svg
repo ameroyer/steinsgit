@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Metal Upa, reduced to the parts that still read at 16 pixels:
+       one ball, two ring ears, two eyes. -->
+  <rect width="64" height="64" rx="12" fill="#0a0a09"/>
+  <g stroke="#20242a" stroke-width="4" fill="#c3cbc8">
+    <circle cx="17" cy="19" r="8"/>
+    <circle cx="47" cy="19" r="8"/>
+  </g>
+  <circle cx="17" cy="19" r="3.4" fill="#0a0a09"/>
+  <circle cx="47" cy="19" r="3.4" fill="#0a0a09"/>
+  <circle cx="32" cy="36" r="21" fill="#d5dbd8" stroke="#20242a" stroke-width="3"/>
+  <circle cx="26" cy="30" r="6" fill="#f2f5f3" stroke="#20242a" stroke-width="2.6"/>
+  <circle cx="42" cy="30" r="6" fill="#f2f5f3" stroke="#20242a" stroke-width="2.6"/>
+  <circle cx="26" cy="30" r="2.6" fill="#1c201f"/>
+  <circle cx="42" cy="30" r="2.6" fill="#1c201f"/>
+  <path d="M27 42 l2.5 3 l2.5 -2.8 l2.5 2.8 l2.5 -3" fill="none"
+        stroke="#1c201f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

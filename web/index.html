@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STEINS;GIT - branch divergence</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="crt">
+  <div id="scanlines"></div>
+  <div id="vignette"></div>
+  <div id="flicker"></div>
+</div>
+
+<header id="topbar">
+  <!-- Slowly turning gears behind the header. Each gear is drawn around its
+       own origin and rotated about (0,0), so no transform-box juggling is
+       needed and the translate on the wrapper is never overwritten. -->
+  <svg id="cogs" viewBox="0 0 300 64" preserveAspectRatio="xMinYMid slice"
+       aria-hidden="true" focusable="false"
+       fill="none" stroke="#ff9a2e" stroke-width="2.4" stroke-linejoin="round">
+    <g transform="translate(60 22)">
+      <g class="cog slow">
+        <path d="M0,-34 L5,-33 L7,-25 L13,-22 L20,-26 L24,-22 L20,-15 L23,-9 L31,-7 L32,-2
+                 L25,2 L24,9 L30,14 L27,19 L19,17 L14,22 L15,30 L10,32 L6,25 L-1,25 L-6,32
+                 L-11,30 L-10,22 L-15,17 L-23,19 L-26,14 L-20,9 L-21,2 L-28,-2 L-27,-7
+                 L-19,-9 L-16,-15 L-20,-22 L-16,-26 L-9,-22 L-3,-25 L-1,-33 Z"/>
+        <circle r="11" stroke-width="2"/><circle r="4" stroke-width="1.5"/>
+      </g>
+    </g>
+    <g transform="translate(112 50) scale(.70)">
+      <g class="cog mid">
+        <path d="M0,-34 L5,-33 L7,-25 L13,-22 L20,-26 L24,-22 L20,-15 L23,-9 L31,-7 L32,-2
+                 L25,2 L24,9 L30,14 L27,19 L19,17 L14,22 L15,30 L10,32 L6,25 L-1,25 L-6,32
+                 L-11,30 L-10,22 L-15,17 L-23,19 L-26,14 L-20,9 L-21,2 L-28,-2 L-27,-7
+                 L-19,-9 L-16,-15 L-20,-22 L-16,-26 L-9,-22 L-3,-25 L-1,-33 Z"/>
+        <circle r="11" stroke-width="2"/><circle r="4" stroke-width="1.5"/>
+      </g>
+    </g>
+    <g transform="translate(14 48) scale(.50)">
+      <g class="cog fast">
+        <path d="M0,-34 L5,-33 L7,-25 L13,-22 L20,-26 L24,-22 L20,-15 L23,-9 L31,-7 L32,-2
+                 L25,2 L24,9 L30,14 L27,19 L19,17 L14,22 L15,30 L10,32 L6,25 L-1,25 L-6,32
+                 L-11,30 L-10,22 L-15,17 L-23,19 L-26,14 L-20,9 L-21,2 L-28,-2 L-27,-7
+                 L-19,-9 L-16,-15 L-20,-22 L-16,-26 L-9,-22 L-3,-25 L-1,-33 Z"/>
+        <circle r="11" stroke-width="2"/><circle r="4" stroke-width="1.5"/>
+      </g>
+    </g>
+  </svg>
+  <div class="brand">
+    <div class="brand-mark">STEINS;GIT</div>
+    <div class="brand-sub" id="repoName">-</div>
+  </div>
+
+  <div id="meterWrap">
+    <div id="meterLabel">DIVERGENCE</div>
+    <div id="meter" class="meter" aria-live="polite"></div>
+    <div id="meterFoot">
+      <span id="fieldGlyph">θ</span>
+      <span id="fieldName">reference</span>
+      <span class="sep">·</span>
+      <span id="meterTarget">select a branch</span>
+    </div>
+  </div>
+
+  <div class="meta">
+    <div><span class="k">DEFAULT</span><span class="v" id="metaMain">-</span></div>
+    <div><span class="k">BRANCHES</span><span class="v" id="metaBranches">-</span></div>
+    <div><span class="k">COMMITS</span><span class="v" id="metaCommits">-</span></div>
+    <div><span class="k">CACHED</span><span class="v" id="metaCache">-</span></div>
+    <div><span class="k">DAYS</span><span class="v"><input id="daysInput" type="number" min="0" max="3650" step="1" title="how many days of history to read"></span></div>
+  </div>
+
+  <button id="upaBtn" title="What is this? How is divergence calculated?">
+    <svg viewBox="0 0 64 64" width="42" height="42" aria-hidden="true">
+      <defs>
+        <radialGradient id="upaBall" cx=".36" cy=".30" r=".78">
+          <stop offset="0%"   stop-color="#ffffff"/>
+          <stop offset="22%"  stop-color="#e4e7e6"/>
+          <stop offset="55%"  stop-color="#b6bcbb"/>
+          <stop offset="82%"  stop-color="#878e8d"/>
+          <stop offset="100%" stop-color="#5f6766"/>
+        </radialGradient>
+        <linearGradient id="upaRing" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#d8dcdb"/>
+          <stop offset="100%" stop-color="#7d8483"/>
+        </linearGradient>
+      </defs>
+
+      <!-- four little nub feet, back pair first -->
+      <ellipse cx="14.5" cy="50" rx="4.6" ry="4"   fill="#79807f"/>
+      <ellipse cx="49.5" cy="50" rx="4.6" ry="4"   fill="#79807f"/>
+      <ellipse cx="23"   cy="57.5" rx="5.6" ry="4.6" fill="url(#upaRing)" stroke="#4d5453" stroke-width=".7"/>
+      <ellipse cx="41"   cy="57.5" rx="5.6" ry="4.6" fill="url(#upaRing)" stroke="#4d5453" stroke-width=".7"/>
+
+      <!-- ring ears: thick light annulus, dark rim inside and out -->
+      <circle cx="16" cy="16" r="8" fill="none" stroke="#2c2f2e" stroke-width="2"/>
+      <circle cx="16" cy="16" r="8" fill="none" stroke="url(#upaRing)" stroke-width="6.4"/>
+      <circle cx="16" cy="16" r="8" fill="none" stroke="#2c2f2e" stroke-width="1"/>
+      <circle cx="48" cy="16" r="8" fill="none" stroke="#2c2f2e" stroke-width="2"/>
+      <circle cx="48" cy="16" r="8" fill="none" stroke="url(#upaRing)" stroke-width="6.4"/>
+      <circle cx="48" cy="16" r="8" fill="none" stroke="#2c2f2e" stroke-width="1"/>
+
+      <!-- the body is one sphere; there is no separate head -->
+      <circle cx="32" cy="34" r="23" fill="url(#upaBall)"/>
+      <ellipse cx="22.5" cy="21.5" rx="8" ry="5" fill="#ffffff" opacity=".55"
+               transform="rotate(-28 22.5 21.5)"/>
+
+      <!-- tall eyes, set wide enough apart to leave the mouth its own room -->
+      <rect x="17.8" y="25" width="9.6" height="15.5" rx="4.5"
+            fill="#f5f7f6" stroke="#242827" stroke-width="2"/>
+      <rect x="36.6" y="25" width="9.6" height="15.5" rx="4.5"
+            fill="#f5f7f6" stroke="#242827" stroke-width="2"/>
+      <ellipse cx="22.6" cy="30" rx="3" ry="3.3" fill="#1c201f"/>
+      <ellipse cx="41.4" cy="30" rx="3" ry="3.3" fill="#1c201f"/>
+
+      <!-- nose dot and the little zigzag mouth, clear of both eyes -->
+      <ellipse cx="32" cy="30.5" rx="1.5" ry="1.2" fill="#242827"/>
+      <path d="M28.4 35.2 l1.8 2.4 l1.8 -2.3 l1.8 2.3 l1.8 -2.4"
+            stroke="#242827" stroke-width="1.6" fill="none"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span id="upaLabel">HELP</span>
+  </button>
+</header>
+
+<main id="stage">
+
+  <aside id="rail">
+    <div class="rail-head">
+      <span>BRANCHES</span>
+      <button id="refreshBtn" class="mini" title="read the repository again (r)">RESCAN…</button>
+    </div>
+    <div id="filterRow">
+      <input id="filterInput" type="text" spellcheck="false" autocomplete="off"
+             placeholder="filter branches · regex"
+             title="Branches that do not match stay on the canvas, but step back and give their width to the ones that do. Escape clears it.">
+      <span id="filterCount"></span>
+      <button id="filterClear" class="mini" hidden title="clear the filter">✕</button>
+    </div>
+    <label id="aiRow" title="Ring every commit whose message credits a model as co-author. The author stays whoever made the commit - this is about the Co-Authored-By line, not about who wrote it.">
+      <input type="checkbox" id="aiToggle">
+      <span>MARK CLAUDE CO-AUTHORED</span>
+      <span id="aiCount"></span>
+    </label>
+    <div id="branchList"></div>
+
+    <div class="rail-head"><span>COMPARE TWO BRANCHES</span></div>
+    <div id="selectionBox">
+      <div class="slot" id="slotA"><span class="tag">A</span><span class="nm">-</span></div>
+      <div class="slot" id="slotB"><span class="tag">B</span><span class="nm">-</span></div>
+      <div id="pairReadout" class="pair-readout">Click two branches to compare them.</div>
+      <button id="analyzeBtn" class="act" disabled>ASK CLAUDE TO COMPARE</button>
+      <button id="worktreeBtn" class="act ghost" disabled>CREATE MERGE WORKTREE</button>
+    </div>
+  </aside>
+
+  <section id="canvasWrap">
+    <canvas id="canvas"></canvas>
+    <div id="tooltip" class="tooltip hidden"></div>
+    <div id="canvasHint">Time goes up, newest at the top. Drag or <b>shift</b>-scroll to travel. Scroll to zoom. Click a branch for its path back to the default branch, two for the path between them, <b>double-click</b> to single one out. Press <b>f</b> to go back to the top.</div>
+    <div id="loading" class="loading">READING THE REPOSITORY…</div>
+  </section>
+
+  <aside id="inspector" class="hidden">
+    <button id="inspectorClose" class="mini close">✕</button>
+    <div id="inspectorBody"></div>
+  </aside>
+
+</main>
+
+<section id="oracle" class="collapsed">
+  <div id="oracleHead">
+    <span class="dot"></span>
+    <span id="oracleTitle">CLAUDE: idle</span>
+    <span class="grow"></span>
+    <span id="oracleUsage" class="usage"></span>
+    <button id="oracleStop" class="mini stop" hidden title="stop after the call that is already running">STOP</button>
+    <button id="oracleRerun" class="mini" hidden title="ignore the saved answer and ask again">ASK AGAIN</button>
+    <button id="oracleToggle" class="mini">▲</button>
+  </div>
+  <div id="oracleBar"><i></i></div>
+  <pre id="oracleOut"></pre>
+</section>
+
+<div id="modal" class="hidden">
+  <div class="modal-card">
+    <button id="modalX" class="mini close">✕</button>
+    <h3 id="modalTitle">Title</h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions">
+      <button id="modalCancel" class="act ghost">CANCEL</button>
+      <button id="modalOk" class="act">CONFIRM</button>
+    </div>
+  </div>
+</div>
+
+<script src="/meter.js"></script>
+<script src="/render.js"></script>
+<script src="/core.js"></script>
+<script src="/claude.js"></script>
+<script src="/panels.js"></script>
+<script src="/dialogs.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+
+# Saved scans, Claude answers, exports and merge worktrees.
+.steinsgit/
