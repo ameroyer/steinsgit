@@ -1,5 +1,7 @@
 # STEINS;GIT
 
+ <img align="right" src="logo.png" width="200" >
+ 
 A git viewer that draws branches as diverging lines and measures how far each
 one has moved away from the default branch. Claude sits behind two buttons, for
 the questions a graph cannot answer: what is this branch doing, and can these
