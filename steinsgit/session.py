@@ -355,10 +355,10 @@ class Session:
             c["impact"] = divergence.commit_impact(
                 c.get("insertions", 0), c.get("deletions", 0), c.get("files", 0)
             )
+            c["url"] = self.forge.commit(c["sha"])
+        # Relative size is scaled across the group, so it needs them all first.
         divergence.scale_rel([c["impact"] for c in commits])
         tip = self.repo.rev_parse(name)
-        for c in commits:
-            c["url"] = self.forge.commit(c["sha"])
         return {
             "name": name,
             "label": short_label(name),
@@ -544,30 +544,39 @@ class Session:
         todo_desc = [n for n in branch_names
                      if not self.branch_summary(n, tip_of.get(n))]
         desc_batches = -(-len(todo_desc) // self.DESCRIBE_BATCH)
-        history = self._call_history()
+        # Priced from this repository's own past calls, using the running
+        # totals the store already keeps. Averaging the stored answers instead
+        # would divide a batch's tokens by the number of summaries in it and
+        # then multiply by the number of calls, which prices a full run well
+        # under what it comes to.
+        spend = self.store.spend()
         calls = batches + desc_batches + len(todo_branches)
         estimate = None
-        if history["samples"] >= 2:
+        if spend["calls"] >= 2:
+            per_call = spend["tokens"] / spend["calls"]
+            per_cost = spend["costUsd"] / spend["calls"]
             estimate = {
                 "calls": calls,
-                "tokens": int(history["tokensPerCall"] * calls),
-                "costUsd": round(history["costPerCall"] * calls, 4),
-                "basedOn": history["samples"],
+                "tokens": int(per_call * calls),
+                "costUsd": round(per_cost * calls, 4),
+                "basedOn": spend["calls"],
             }
 
         # What has already been paid for, so a second run is an informed
-        # decision rather than a repeat of the first one.
-        done_at = [row.get("at") or row.get("_created") or 0
-                   for kind in ("explain", "oracle")
-                   for row in self.store.list(kind, limit=20000)]
-        done_at = [t for t in done_at if t]
+        # decision rather than a repeat of the first one. Both ends of the
+        # window come from aggregates: finding two timestamps by reading every
+        # answer ever stored costs a JSON parse per row, and there can be tens
+        # of thousands of them.
+        kinds = self.store.summary().get("kinds", {})
+        oldest = [k["oldest"] for name, k in kinds.items()
+                  if name in ("explain", "oracle") and k.get("oldest")]
         done = {
             "commitsExplained": len(commits) - len(todo_commits),
             "branchesDescribed": len(branch_names) - len(todo_desc),
             "branchesAnalysed": len(branch_names) - len(todo_branches),
-            "firstAt": min(done_at) if done_at else None,
-            "lastAt": max(done_at) if done_at else None,
-            "spend": self.store.spend(),
+            "firstAt": min(oldest) if oldest else None,
+            "lastAt": spend["lastAt"] or None,
+            "spend": spend,
         }
 
         return {
@@ -592,25 +601,6 @@ class Session:
             "model": self.model,
             "askOnOpen": self.ask_on_open,
             "fresh": not analysed and not (len(commits) - len(todo_commits)),
-        }
-
-    def _call_history(self) -> dict:
-        """Average tokens and cost per model call, from what we have spent."""
-        tokens = cost = samples = 0
-        for kind in ("oracle", "explain"):
-            for row in self.store.list(kind, limit=2000):
-                usage = (row.get("usage") or {}).get("total") or 0
-                if not usage:
-                    continue
-                samples += 1
-                tokens += usage
-                cost += row.get("costUsd") or 0.0
-        if not samples:
-            return {"samples": 0, "tokensPerCall": 0, "costPerCall": 0.0}
-        return {
-            "samples": samples,
-            "tokensPerCall": tokens / samples,
-            "costPerCall": cost / samples,
         }
 
     def _persisted(self) -> dict:

@@ -227,13 +227,18 @@ class Store:
 
     def _rebuild_spend(self) -> dict:
         """One full pass, done once, for a database written before this existed."""
-        totals = {"calls": 0, "tokens": 0, "costUsd": 0.0, "lastAt": 0}
+        totals = {"calls": 0.0, "tokens": 0, "costUsd": 0.0, "lastAt": 0}
         for kind in ("oracle", "explain"):
             for row in self.list(kind, limit=20000):
-                totals["calls"] += 1
+                # A summary is one of a batch that cost a single call, and it
+                # stored its share of that call's tokens and money. Counting
+                # each row as a call would report a run of ten calls as four
+                # hundred, and price the next one off that.
+                totals["calls"] += 1 / (row.get("batch") or 1)
                 totals["tokens"] += (row.get("usage") or {}).get("total") or 0
                 totals["costUsd"] += row.get("costUsd") or 0.0
                 totals["lastAt"] = max(totals["lastAt"], row.get("at") or row.get("_created") or 0)
+        totals["calls"] = round(totals["calls"])
         totals["costUsd"] = round(totals["costUsd"], 6)
         self.put("meta", "spend", totals)
         return totals

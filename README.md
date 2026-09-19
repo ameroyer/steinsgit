@@ -9,17 +9,24 @@ two be merged.
 
 No dependencies. Python 3.9, git, and the `claude` CLI if you want the analysis.
 
-Merge tests use `git merge-tree --write-tree`, which needs **git 2.38 or
-newer**. On older git the same merge is performed on a scratch index instead;
-the answer matches except that renames are not followed, so a file renamed on
-one side and edited on the other is reported as a conflict when git itself
-would merge it. Which engine answered is shown with the result.
+```
+uvx git+https://github.com/ameroyer/steinsgit /path/to/repo
+```
+
+It opens http://127.0.0.1:8787 for you.
+
+Nothing is installed: [uv](https://docs.astral.sh/uv/) fetches the tool into its
+own cache, runs it, and leaves your environment alone. It keeps what it fetched,
+so add `--refresh` to pick up new commits, or name a tag or commit to pin one:
+`uvx git+https://github.com/ameroyer/steinsgit@<ref>`. To keep it around as a
+command instead, `uv tool install git+https://github.com/ameroyer/steinsgit`
+puts `steinsgit` on your PATH.
+
+From a clone it also runs with nothing but Python, no uv and no install step:
 
 ```
 ./steinsgit.py /path/to/repo
 ```
-
-It opens http://127.0.0.1:8787 for you.
 
 
 
@@ -133,6 +140,12 @@ Pick two branches and press **ASK CLAUDE TO COMPARE**. Before the model is
 asked, `git merge-tree` performs a real merge in memory, so the conflict list is
 fact rather than a guess. The model gets that result and explains what collides,
 in what order to fix it, and what might break that git cannot see.
+
+That merge test wants **git 2.38 or newer**, for `merge-tree --write-tree`. On
+older git the same merge runs on a scratch index instead; the answer matches
+except that renames are not followed, so a file renamed on one side and edited
+on the other is called a conflict where git itself would merge it. Which engine
+answered is shown with the result.
 
 **EXPLAIN THESE COMMITS** writes a one-line summary of each commit and of the
 branch. A commit's summary is saved against the commit, so one written from a

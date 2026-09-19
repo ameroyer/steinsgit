@@ -113,12 +113,14 @@ class Routes:
             ]})
 
         elif route == "/api/analysis":
-            rows = self.sess.store.list("oracle", limit=300)
+            # One keyed lookup: the caller already has the key, so there is no
+            # reason to parse the three hundred newest answers to find it -
+            # and an answer older than those is still worth showing.
             wanted = q.get("key")
-            hit = next((r for r in rows if r.get("_key") == wanted), None)
-            if not hit:
+            row = self.sess.store.get("oracle", wanted) if wanted else None
+            if not row:
                 return self._error("no such analysis", 404)
-            self._json(hit)
+            self._json({**row, "_key": wanted})
 
         elif route == "/api/explain/stream":
             self._explain_stream(q)

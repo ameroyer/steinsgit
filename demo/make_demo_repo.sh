@@ -144,3 +144,4 @@ echo "demo repository ready: $TARGET"
 git -C "$TARGET" log --oneline --graph --all --decorate -n 20
 echo
 echo "run:  ./steinsgit.py $TARGET"
+echo "  or: uvx git+https://github.com/ameroyer/steinsgit $TARGET"

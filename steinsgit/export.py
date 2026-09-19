@@ -12,7 +12,7 @@ import json
 import os
 import time
 
-WEB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 
 def _read(name: str) -> str:

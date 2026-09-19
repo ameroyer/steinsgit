@@ -11,9 +11,28 @@ import os
 import re
 import subprocess
 
-from .gitdata import GitError, Repo, numstat_lines
+from .gitdata import GitError, Repo, git_env, numstat_lines
 
 WORKTREE_ROOT = ".steinsgit/worldlines"
+
+
+def _git(path: str, *args: str) -> tuple[bool, str]:
+    """Run git inside a worktree: (succeeded, stdout).
+
+    Worktree commands run with `cwd` set to the worktree rather than the
+    repository, which is the whole reason they cannot go through `Repo.run`.
+    """
+    proc = subprocess.run(
+        ("git", *args), cwd=path, capture_output=True, text=True,
+        timeout=300, env=git_env(),
+    )
+    return proc.returncode == 0, proc.stdout
+
+
+def _out(path: str, *args: str) -> str:
+    """Just the output, empty when the command failed."""
+    ok, out = _git(path, *args)
+    return out if ok else ""
 
 
 def _slug(name: str, limit: int = 24) -> str:
@@ -101,27 +120,23 @@ def create(repo: Repo, base: str, incoming: str, branch: str | None = None) -> d
         capture_output=True,
         text=True,
         timeout=300,
-        env={**os.environ, "LC_ALL": "C"},
+        env=git_env(),
     )
     clean = merge.returncode == 0
-
-    def _git(*args: str) -> str:
-        return subprocess.run(
-            ("git",) + args, cwd=path, capture_output=True, text=True,
-            env={**os.environ, "LC_ALL": "C"},
-        ).stdout
 
     conflicts: list[dict] = []
     changed: list[dict] = []
     commit_sha = None
 
     if clean:
-        commit_sha = _git("rev-parse", "--short", "HEAD").strip()
-        for a, d, name in numstat_lines(_git("diff", "--numstat", "HEAD^1", "HEAD").splitlines()):
-            changed.append({"path": name, "insertions": a, "deletions": d})
+        commit_sha = _out(path, "rev-parse", "--short", "HEAD").strip()
+        for a, d, fname in numstat_lines(
+                _out(path, "diff", "--numstat", "HEAD^1", "HEAD").splitlines()):
+            changed.append({"path": fname, "insertions": a, "deletions": d})
         changed.sort(key=lambda f: -(f["insertions"] + f["deletions"]))
     else:
-        names = [ln for ln in _git("diff", "--name-only", "--diff-filter=U").splitlines() if ln.strip()]
+        names = [ln for ln in
+                 _out(path, "diff", "--name-only", "--diff-filter=U").splitlines() if ln.strip()]
         conflicts = _conflict_detail(path, names)
 
     return {
@@ -182,12 +197,7 @@ def recover_provenance(repo: Repo, branch: str) -> dict | None:
 
     incoming = base = None
     if path and os.path.isdir(path):
-        def _git(*args):
-            proc = subprocess.run(("git",) + args, cwd=path, capture_output=True,
-                                  text=True, env={**os.environ, "LC_ALL": "C"})
-            return proc.stdout.strip() if proc.returncode == 0 else ""
-
-        git_dir = _git("rev-parse", "--git-dir")
+        git_dir = _out(path, "rev-parse", "--git-dir").strip()
         if git_dir:
             if not os.path.isabs(git_dir):
                 git_dir = os.path.join(path, git_dir)
@@ -199,8 +209,8 @@ def recover_provenance(repo: Repo, branch: str) -> dict | None:
             except OSError:
                 pass
 
-        head = _git("rev-parse", "HEAD")
-        merge_head = _git("rev-parse", "MERGE_HEAD")
+        head = _out(path, "rev-parse", "HEAD").strip()
+        merge_head = _out(path, "rev-parse", "MERGE_HEAD").strip()
         tips = {r.sha: r.name for r in repo.refs(include_remotes=False)
                 if not r.name.startswith("worldline/")}
         base = tips.get(head)
@@ -239,19 +249,12 @@ def status(repo: Repo, branch: str, path: str | None = None) -> dict | None:
     if not path or not os.path.isdir(path):
         return None
 
-    def _git(*args: str) -> tuple[bool, str]:
-        proc = subprocess.run(
-            ("git",) + args, cwd=path, capture_output=True, text=True,
-            env={**os.environ, "LC_ALL": "C"},
-        )
-        return proc.returncode == 0, proc.stdout
-
-    ok, unresolved = _git("diff", "--name-only", "--diff-filter=U")
+    ok, unresolved = _git(path, "diff", "--name-only", "--diff-filter=U")
     files = [ln for ln in unresolved.splitlines() if ln.strip()] if ok else []
     detail = _conflict_detail(path, files)
 
-    _, staged = _git("diff", "--name-only", "--cached")
-    _, merging = _git("rev-parse", "--verify", "--quiet", "MERGE_HEAD")
+    _, staged = _git(path, "diff", "--name-only", "--cached")
+    _, merging = _git(path, "rev-parse", "--verify", "--quiet", "MERGE_HEAD")
     return {
         "path": path,
         "unresolved": detail,

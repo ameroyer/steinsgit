@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, urlparse
 from .routes import Routes
 from .session import Session
 
-WEB_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+WEB_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 
 # Any host name that can only mean this machine.

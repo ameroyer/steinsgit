@@ -82,6 +82,25 @@
 ./steinsgit.py /path/to/repo --no-cache  <b># ignore saved data</b></pre>
 <p>There is nothing to install and nothing to build. Python 3.9 and git are
 enough. The <code>claude</code> CLI is only needed for the analysis buttons.</p>
+<p>The same command exists three ways, all of them calling
+<code>steinsgit/cli.py</code>: the <code>./steinsgit.py</code> script for working
+in a checkout, <code>python -m steinsgit</code>, and the installed
+<code>steinsgit</code> console script that <code>pip</code>, <code>uv tool
+install</code> and <code>uvx</code> create from <code>pyproject.toml</code>.
+Nothing else in the tree is an entry point.</p>
+<pre>uvx git+https://github.com/ameroyer/steinsgit /path/to/repo   <b># no checkout, no install</b>
+uv build                                                     <b># wheel + sdist into dist/</b>
+uv cache clean steinsgit                                     <b># before reinstalling one version twice</b></pre>
+<p>That last line is not optional when you are testing the packaged build:
+installing a rebuilt wheel whose version has not changed serves the previous
+one out of uv's cache, <code>--refresh</code> included, and you will be reading
+the behaviour of the code you replaced. Installing from a git URL is keyed on
+the commit and does not have that problem.</p>
+<div class="note">The browser files live <b>inside</b> the package, at
+<code>steinsgit/web/</code>, so that a wheel carries them. <code>server.py</code>
+and <code>export.py</code> both resolve them relative to the package directory;
+anything new they need has to go in there too, or it will work from a checkout
+and 404 once installed.</div>
 
 <h2 id="shape">2. SHAPE OF THE THING</h2>
 <p>A Python process reads git, holds the result in memory, and serves a single
@@ -121,6 +140,7 @@ count.</p>
 <h2 id="modules">4. MODULE REFERENCE</h2>
 <table>
 <tr><th>FILE</th><th>DOES</th></tr>
+<tr><td>cli.py</td><td class="d">Argument parsing, startup banner, and the console script.</td></tr>
 <tr><td>gitdata.py</td><td class="d">Runs git and parses it. One <code>Repo</code> class. Never writes.</td></tr>
 <tr><td>layout.py</td><td class="d">Turns commits into columns and vertical positions.</td></tr>
 <tr><td>divergence.py</td><td class="d">The six measurements, the bands, and per-commit change size.</td></tr>

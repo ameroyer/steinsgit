@@ -413,7 +413,7 @@ class Repo:
             capture_output=True,
             text=True,
             timeout=120,
-            env={**os.environ, "LC_ALL": "C"},
+            env=git_env(),
         )
         stdout = proc.stdout
         if proc.returncode not in (0, 1):
@@ -456,7 +456,7 @@ class Repo:
             proc = subprocess.run(
                 ("git", "merge-tree", "--write-tree", "-h"),
                 cwd=self.path, capture_output=True, text=True, timeout=20,
-                env={**os.environ, "LC_ALL": "C"},
+                env=git_env(),
             )
             blurb = (proc.stdout + proc.stderr)
             self._write_tree = "--write-tree" in blurb
@@ -485,8 +485,7 @@ class Repo:
         # create, not an existing empty file - git reads a zero-byte index as a
         # truncated one and refuses to go on.
         scratch = tempfile.mkdtemp(prefix="steinsgit-merge-")
-        env = {**os.environ, "LC_ALL": "C",
-               "GIT_INDEX_FILE": os.path.join(scratch, "index")}
+        env = {**git_env(), "GIT_INDEX_FILE": os.path.join(scratch, "index")}
         try:
             read = subprocess.run(
                 ("git", "read-tree", "-m", "--aggressive", base, a, b),
@@ -555,7 +554,7 @@ class Repo:
             done = subprocess.run(
                 ("git", "merge-file", "-q", "-p", *paths),
                 cwd=self.path, capture_output=True, timeout=60,
-                env={**os.environ, "LC_ALL": "C"},
+                env=git_env(),
             )
             # 0 clean, >0 is the number of conflict hunks, <0 is a real error.
             # A binary file git refuses to merge comes back as an error, which
@@ -572,7 +571,7 @@ class Repo:
         return subprocess.run(
             ("git", "cat-file", "blob", oid),
             cwd=self.path, capture_output=True, timeout=60,
-            env={**os.environ, "LC_ALL": "C"},
+            env=git_env(),
         ).stdout
 
 

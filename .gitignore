@@ -3,3 +3,8 @@ __pycache__/
 
 # Saved scans, Claude answers, exports and merge worktrees.
 .steinsgit/
+
+# Build output and local environments.
+dist/
+*.egg-info/
+.venv/
