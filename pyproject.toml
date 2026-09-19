@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "steinsgit"
+dynamic = ["version"]
+description = "A git world-line viewer that draws branches as diverging lines and measures how far each has moved from the default branch."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Amelie Royer" }]
+keywords = ["git", "visualisation", "branches", "divergence", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+# No runtime dependencies: git, the standard library, and optionally the
+# `claude` CLI are the whole of it.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ameroyer/steinsgit"
+Repository = "https://github.com/ameroyer/steinsgit"
+
+[project.scripts]
+steinsgit = "steinsgit.cli:main"
+
+[tool.hatch.version]
+path = "steinsgit/__init__.py"
+
+# `steinsgit.py` at the root is a convenience shim for a checkout, not part of
+# the distribution; only the package ships, web assets included.
+[tool.hatch.build.targets.wheel]
+packages = ["steinsgit"]
+
+[tool.hatch.build.targets.sdist]
+include = ["steinsgit", "README.md", "LICENSE", "docs", "demo", "steinsgit.py"]
